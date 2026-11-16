@@ -78,12 +78,47 @@ main { display: flex; flex-direction: column; min-height: 0; background: var(--p
 .btn.primary { background: var(--accent); color: #fff; }
 .btn.danger { background: var(--danger); color: #fff; }
 
+/* ── Phones & tablets ───────────────────────────────────────── */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; }
+button { touch-action: manipulation; }
+
+/* Keep clear of the notch, rounded corners and home bar */
+aside { padding-left: env(safe-area-inset-left); }
+.brand { padding-top: max(18px, env(safe-area-inset-top)); }
+.toolbar { padding-top: max(12px, env(safe-area-inset-top)); padding-right: max(20px, env(safe-area-inset-right)); }
+.footer { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+.editor { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
+
 @media (max-width: 760px) {
   .app { grid-template-columns: 1fr; }
   aside { border-right: 0; }
   .app.editing aside { display: none; }
   .app:not(.editing) main { display: none; }
-  .back { display: inline-block; }
+
+  /* iPhone zooms into any text box under 16px; this stops it */
+  .search, .field, .body { font-size: 16px; }
+
+  /* Bigger tap targets */
+  .brand h1 { font-size: 26px; }
+  .new { padding: 10px 16px; font-size: 15px; }
+  .search { padding: 11px 14px; margin: 4px 14px 12px; }
+  .item { padding: 13px 14px; }
+  .item .p { font-size: 14px; }
+  .trash-link { padding: 12px 14px; font-size: 14px; }
+  .me { padding: 8px 10px; }
+  .back { display: inline-block; padding: 10px 12px 10px 4px; font-size: 16px; }
+  .tb { padding: 10px 12px; font-size: 15px; }
+  .toolbar { padding-left: 12px; gap: 2px; }
+  .saved { font-size: 12px; }
+
+  .editor { padding-top: 20px; }
   .title { font-size: 26px; }
   .inner { padding: 0 20px; }
+  .body { line-height: 1.6; }
+
+  /* Dialogs sit above the keyboard on phones */
+  .modal { align-items: flex-start; padding-top: max(15vh, env(safe-area-inset-top)); }
+  .btn { padding: 11px 16px; font-size: 15px; }
+  .field { padding: 12px 14px; }
 }

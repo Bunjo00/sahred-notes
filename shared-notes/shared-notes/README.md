@@ -67,6 +67,15 @@ Then open the **Actions** tab, click **Keep Supabase awake → Run workflow** on
 
 ---
 
+## On phones
+The site adapts to phones and tablets. To use it like an app with its own icon:
+- **iPhone/iPad (Safari):** tap **Share** → **Add to Home Screen**.
+- **Android (Chrome):** tap **⋮** → **Add to Home screen** (or **Install app**).
+
+It then opens full-screen without the browser bar. The back gesture returns to the note list.
+
+---
+
 ## Everyday admin (SQL Editor)
 
 | To… | Run |
