@@ -8,6 +8,7 @@ import { createList } from './ui/list.js';
 import { createEditor } from './ui/editor.js';
 import { confirmDialog, askName, askPassword, showFatal } from './ui/dialog.js';
 import { setStatus, showBanner } from './ui/status.js';
+import { maybeShowInstallHint } from './ui/installHint.js';
 
 const state = createNotesState();
 let store = null;
@@ -69,23 +70,41 @@ function setView(v) {
   render();
 }
 
-function setHash(id) {
-  try { history.replaceState(null, '', id ? `#n-${id}` : location.pathname + location.search); } catch { /* ignore */ }
-}
-
-async function openNote(id) {
+// Each open note gets one history entry, so the phone's back button / swipe-back
+// returns to the list instead of leaving the app.
+async function openNote(id, { fromHistory = false } = {}) {
   const note = state.get(id);
   if (!note) return;
   await editor.open(note);
-  setHash(id);
+  if (!fromHistory && location.hash !== `#n-${id}`) {
+    try {
+      if (history.state?.note) history.replaceState({ note: id }, '', `#n-${id}`);
+      else history.pushState({ note: id }, '', `#n-${id}`);
+    } catch { /* ignore */ }
+  }
   render();
 }
 
-function closeNote() {
+function closeNote({ fromHistory = false } = {}) {
   editor.close();
-  setHash(null);
+  if (!fromHistory && location.hash) {
+    try {
+      if (history.state?.note) history.back();
+      else history.replaceState(null, '', location.pathname + location.search);
+    } catch { /* ignore */ }
+  }
   render();
 }
+
+window.addEventListener('popstate', async () => {
+  const m = location.hash.match(/^#n-(.+)$/);
+  if (m && state.has(m[1])) {
+    if (editor.currentId !== m[1]) openNote(m[1], { fromHistory: true });
+  } else if (editor.currentId) {
+    await editor.flush();
+    closeNote({ fromHistory: true });
+  }
+});
 
 async function createNote() {
   if (!store) return;
@@ -202,6 +221,7 @@ async function init() {
   });
 
   store.cleanupTrash().catch(() => {});
+  if (created.mode !== 'local') maybeShowInstallHint();
   await refresh();
 
   const m = location.hash.match(/^#n-(.+)$/);
