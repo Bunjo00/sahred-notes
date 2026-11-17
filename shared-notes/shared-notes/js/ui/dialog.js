@@ -38,6 +38,10 @@ function open({ title, text, input = null, okLabel = 'OK', danger = false, cance
 export const confirmDialog = (title, text, okLabel = 'Delete', danger = true) =>
   open({ title, text, okLabel, danger });
 
+/** Ask for a short piece of text. Resolves the trimmed text, or null if cancelled. */
+export const askText = ({ title, text = '', value = '', placeholder = '', okLabel = 'Save', maxLength = 60 }) =>
+  open({ title, text, input: { value, placeholder, maxLength }, okLabel });
+
 export const askName = (current = '', firstTime = false) =>
   open({
     title: firstTime ? 'What should we call you?' : 'Change your name',

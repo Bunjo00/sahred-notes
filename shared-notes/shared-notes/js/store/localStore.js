@@ -14,6 +14,9 @@ export function createLocalStore() {
   const channel = 'BroadcastChannel' in window ? new BroadcastChannel(KEY) : null;
   const broadcast = (msg) => channel?.postMessage(msg);
   const now = () => new Date().toISOString();
+  const FKEY = `${KEY}.folders`;
+  const readFolders = () => { try { return JSON.parse(safeStorage.get(FKEY) || '{}'); } catch { return {}; } };
+  const writeFolders = (f) => safeStorage.set(FKEY, JSON.stringify(f));
 
   return {
     async ensureAccess() { return 'ok'; },
@@ -66,6 +69,38 @@ export function createLocalStore() {
         }
       }
       write(db);
+    },
+
+    async listFolders() {
+      return Object.values(readFolders());
+    },
+
+    async createFolder(name) {
+      const f = readFolders();
+      const folder = { id: randomId(), name: name.trim(), created_at: now() };
+      f[folder.id] = folder; writeFolders(f);
+      broadcast({ type: 'folder-upsert', folder });
+      return folder;
+    },
+
+    async renameFolder(id, name) {
+      const f = readFolders();
+      if (!f[id]) throw new NotFoundError();
+      f[id] = { ...f[id], name: name.trim() }; writeFolders(f);
+      broadcast({ type: 'folder-upsert', folder: f[id] });
+      return f[id];
+    },
+
+    // Mirrors the database: deleting a folder un-files its notes.
+    async deleteFolder(id) {
+      const f = readFolders();
+      delete f[id]; writeFolders(f);
+      const db = read();
+      for (const n of Object.values(db)) {
+        if (n.folder_id === id) { n.folder_id = null; broadcast({ type: 'upsert', note: n }); }
+      }
+      write(db);
+      broadcast({ type: 'folder-delete', id });
     },
   };
 }

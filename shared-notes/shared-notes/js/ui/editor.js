@@ -8,10 +8,14 @@ import { $, debounce, timeAgo } from '../lib/utils.js';
 import { identity } from '../lib/identity.js';
 import { showBanner, hideBanner } from './status.js';
 
-export function createEditor({ autosaveDelayMs = 700, onSave, onPin, onDelete, onRestore, onClose }) {
+export function createEditor({ autosaveDelayMs = 700, onSave, onPin, onDelete, onRestore, onMove, onClose }) {
   const app = $('app'), title = $('title'), body = $('body');
   const saved = $('saved'), meta = $('meta');
   const pinBtn = $('pinBtn'), delBtn = $('delBtn'), restoreBtn = $('restoreBtn');
+  const moveWrap = $('moveWrap'), folderSelect = $('folderSelect');
+  let folderList = [];       // [{ id, name }]
+  let foldersOn = false;
+  let optionsKey = '';
 
   let note = null;          // the note currently open (latest known copy)
   let dirty = false;        // typed but not sent yet
@@ -28,12 +32,37 @@ export function createEditor({ autosaveDelayMs = 700, onSave, onPin, onDelete, o
     app.classList.toggle('editing', open);
   }
 
+  /** Folder picker in the toolbar. Options are rebuilt only when folders change,
+   *  so a re-render never closes the picker while someone is using it. */
+  function renderFolderPicker() {
+    moveWrap.hidden = !foldersOn || !note;
+    if (moveWrap.hidden) return;
+    const key = JSON.stringify(folderList.map((f) => [f.id, f.name]));
+    if (key !== optionsKey) {
+      optionsKey = key;
+      const opts = [new Option('No folder', '')];
+      for (const f of folderList) opts.push(new Option(f.name, f.id));   // Option() sets text safely
+      folderSelect.replaceChildren(...opts);
+    }
+    const want = note.folder_id && folderList.some((f) => f.id === note.folder_id) ? note.folder_id : '';
+    if (folderSelect.value !== want) folderSelect.value = want;
+    folderSelect.disabled = inTrash();
+    moveWrap.classList.toggle('filed', !!want);
+  }
+
+  function setFolders(list, enabled) {
+    folderList = list;
+    foldersOn = enabled;
+    renderFolderPicker();
+  }
+
   function renderMeta() {
     if (!note) return;
     const trashed = inTrash();
     title.readOnly = body.readOnly = trashed;
     pinBtn.hidden = delBtn.hidden = trashed;
     restoreBtn.hidden = !trashed;
+    renderFolderPicker();
     if (trashed) {
       meta.textContent = `In trash · deleted by ${note.deleted_by || 'someone'} · ${timeAgo(note.deleted_at)}`;
       saved.textContent = 'Read-only while in trash';
@@ -134,12 +163,17 @@ export function createEditor({ autosaveDelayMs = 700, onSave, onPin, onDelete, o
   pinBtn.addEventListener('click', async () => { if (note) { await flush(); onPin(note); } });
   delBtn.addEventListener('click', async () => { if (note) { await flush(); onDelete(note); } });
   restoreBtn.addEventListener('click', () => note && onRestore(note));
+  folderSelect.addEventListener('change', async () => {
+    if (!note) return;
+    await flush();
+    onMove(note, folderSelect.value || null);
+  });
   $('backBtn').addEventListener('click', async () => { await flush(); onClose(); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
   window.addEventListener('pagehide', () => { flush(); });
 
   return {
-    open, close, flush, applyRemote, renderMeta,
+    open, close, flush, applyRemote, renderMeta, setFolders,
     get currentId() { return note?.id ?? null; },
     get currentInTrash() { return inTrash(); },
     focusTitle: () => title.focus(),
