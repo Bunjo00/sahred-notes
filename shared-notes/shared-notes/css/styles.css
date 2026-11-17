@@ -14,10 +14,10 @@ html, body { margin: 0; height: 100%; }
 body { font-family: Inter, system-ui, sans-serif; background: var(--bg); color: var(--ink); font-size: 15px; }
 button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
 
-.app { display: grid; grid-template-columns: 300px 1fr; height: 100vh; height: 100dvh; }
+.app { display: grid; grid-template-columns: 300px minmax(0, 1fr); height: 100vh; height: 100dvh; }
 
 /* Sidebar */
-aside { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+aside { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 .brand { display: flex; align-items: center; justify-content: space-between; padding: 18px 18px 10px; }
 .brand h1 { font-family: Fraunces, serif; font-weight: 600; font-size: 22px; margin: 0; }
 .new { background: var(--accent); color: #fff; border-radius: 10px; padding: 8px 12px; font-weight: 600; font-size: 14px; }
@@ -34,6 +34,35 @@ aside { border-right: 1px solid var(--line); display: flex; flex-direction: colu
 .pin { color: var(--accent); margin-right: 6px; font-size: 11px; }
 .section { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 12px 12px 6px; }
 .empty-list { color: var(--muted); padding: 20px 12px; font-size: 14px; line-height: 1.5; }
+/* Folder tabs */
+.folderbar { display: flex; align-items: flex-start; gap: 6px; padding: 0 14px 0 0; }
+.folders { flex: 1; min-width: 0; display: flex; gap: 6px; overflow-x: auto; padding: 0 0 10px 14px; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent); }
+.folders::-webkit-scrollbar { display: none; }
+.chip { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); font-size: 13px; font-weight: 500; color: var(--ink); max-width: 180px; }
+.chip:hover { background: var(--hover); }
+.chip .chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip .n { color: var(--muted); font-size: 12px; font-weight: 500; }
+.chip.on { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.chip.on .n { color: var(--bg); opacity: .7; }
+.chip.add { border-style: dashed; color: var(--muted); }
+.folder-actions { display: flex; align-items: center; gap: 4px; padding: 0 14px 8px 20px; font-size: 13px; }
+.fa-name { flex: 1; min-width: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fa-btn { padding: 4px 8px; border-radius: 8px; color: var(--muted); font-size: 13px; }
+.fa-btn:hover { background: var(--hover); color: var(--ink); }
+.fa-btn.del:hover { color: var(--danger); }
+.item .tag { display: inline-block; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; margin-right: 6px; padding: 0 6px; border-radius: 6px; background: var(--hover); color: var(--muted); }
+.item.active .tag { background: var(--panel); }
+
+/* Move-to-folder picker in the note toolbar */
+.move { position: relative; display: inline-flex; align-items: center; gap: 4px; padding: 5px 8px; border-radius: 8px; color: var(--muted); cursor: pointer; max-width: 200px; }
+.move:hover { background: var(--hover); }
+.move.filed { color: var(--accent); }
+.move svg { width: 17px; height: 17px; flex: none; }
+.move select { appearance: none; -webkit-appearance: none; border: 0; background: none; color: inherit; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; outline: none; min-width: 0; max-width: 160px; text-overflow: ellipsis; padding: 2px 0; }
+.move select:disabled { cursor: default; }
+.move:focus-within { box-shadow: 0 0 0 2px var(--accent-soft); }
+
 .trash-link { text-align: left; margin: 0 8px 8px; padding: 8px 12px; border-radius: 10px; font-size: 13px; color: var(--muted); }
 .trash-link:hover { background: var(--hover); color: var(--ink); }
 .error { color: var(--danger); font-size: 13px; margin: -8px 0 14px; }
@@ -50,7 +79,7 @@ main { display: flex; flex-direction: column; min-height: 0; background: var(--p
 .toolbar { display: flex; align-items: center; gap: 6px; padding: 12px 20px; border-bottom: 1px solid var(--line); min-height: 56px; }
 .back { display: none; padding: 6px 10px; border-radius: 8px; font-weight: 600; }
 .back:hover, .tb:hover { background: var(--hover); }
-.saved { color: var(--muted); font-size: 13px; flex: 1; }
+.saved { color: var(--muted); font-size: 13px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tb { padding: 7px 10px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--muted); }
 .tb.on { color: var(--accent); }
 .tb.del:hover { color: var(--danger); }
@@ -91,13 +120,22 @@ aside { padding-left: env(safe-area-inset-left); }
 .editor { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 
 @media (max-width: 760px) {
-  .app { grid-template-columns: 1fr; }
+  .app { grid-template-columns: minmax(0, 1fr); }
   aside { border-right: 0; }
   .app.editing aside { display: none; }
   .app:not(.editing) main { display: none; }
 
   /* iPhone zooms into any text box under 16px; this stops it */
   .search, .field, .body { font-size: 16px; }
+
+  /* Folders on phones */
+  .folders { padding-bottom: 12px; }
+  .folderbar .chip.add { padding: 8px 12px; }
+  .chip { padding: 8px 13px; font-size: 14px; }
+  .folder-actions { font-size: 14px; }
+  .fa-btn { padding: 8px 10px; font-size: 14px; }
+  .move { padding: 8px 4px; max-width: 34vw; flex: none; }
+  .move select { font-size: 16px; max-width: 26vw; }
 
   /* Bigger tap targets */
   .brand h1 { font-size: 26px; }
@@ -107,8 +145,8 @@ aside { padding-left: env(safe-area-inset-left); }
   .item .p { font-size: 14px; }
   .trash-link { padding: 12px 14px; font-size: 14px; }
   .me { padding: 8px 10px; }
-  .back { display: inline-block; padding: 10px 12px 10px 4px; font-size: 16px; }
-  .tb { padding: 10px 12px; font-size: 15px; }
+  .back { display: inline-block; padding: 10px 8px 10px 4px; font-size: 16px; white-space: nowrap; flex: none; }
+  .tb { padding: 10px 9px; font-size: 15px; flex: none; }
   .toolbar { padding-left: 12px; gap: 2px; }
   .saved { font-size: 12px; }
 

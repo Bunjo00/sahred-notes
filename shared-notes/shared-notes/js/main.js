@@ -1,12 +1,13 @@
 /** Wires the store, state and UI modules together. */
 import { CONFIG } from './config.js';
-import { $ } from './lib/utils.js';
+import { $, safeStorage } from './lib/utils.js';
 import { identity } from './lib/identity.js';
 import { createNotesState } from './state.js';
 import { createStore, TRASH_DAYS } from './store/index.js';
 import { createList } from './ui/list.js';
 import { createEditor } from './ui/editor.js';
-import { confirmDialog, askName, askPassword, showFatal } from './ui/dialog.js';
+import { confirmDialog, askName, askPassword, askText, showFatal } from './ui/dialog.js';
+import { createFolderBar } from './ui/folders.js';
 import { setStatus, showBanner } from './ui/status.js';
 import { maybeShowInstallHint } from './ui/installHint.js';
 
@@ -14,10 +15,34 @@ const state = createNotesState();
 let store = null;
 let view = 'notes';   // 'notes' | 'trash'
 
+// Folders: 'all' | 'unfiled' | a folder id. Remembered per device.
+const FOLDER_KEY = 'shared-notes.folder';
+let folderSel = safeStorage.get(FOLDER_KEY) || 'all';
+let foldersEnabled = false;   // false until the database has the folders table
+const folderName = (id) => (id && state.folder(id)?.name) || '';
+// The folder actually shown: falls back to 'all' if the saved one was deleted
+// (without forgetting the saved choice while folders are still loading).
+function currentFolder() {
+  if (!foldersEnabled) return 'all';
+  if (folderSel === 'all' || folderSel === 'unfiled' || state.folder(folderSel)) return folderSel;
+  return 'all';
+}
+
 const list = createList({
   container: $('list'),
   searchInput: $('search'),
   onOpen: (id) => openNote(id),
+});
+
+const folderBar = createFolderBar({
+  bar: $('folderBar'),
+  container: $('folders'),
+  addButton: $('addFolderBtn'),
+  actions: $('folderActions'),
+  onSelect: (id) => selectFolder(id),
+  onCreate: () => newFolder(),
+  onRename: (f) => renameFolder(f),
+  onDelete: (f) => deleteFolder(f),
 });
 
 const editor = createEditor({
@@ -49,12 +74,23 @@ const editor = createEditor({
       showBanner('Note restored.', 3000);
     } catch { showBanner('Couldn’t restore the note. Try again.'); }
   },
+  async onMove(note, folderId) {
+    try {
+      state.upsert(await store.update(note.id, { folder_id: folderId }));
+      editor.applyRemote(state.get(note.id));
+      showBanner(folderId ? `Moved to “${folderName(folderId)}”.` : 'Removed from its folder.', 2500);
+    } catch { showBanner('Couldn’t move the note. Try again.'); editor.renderMeta(); }
+  },
   onClose: () => closeNote(),
 });
 
 // ── Rendering & navigation ───────────────────────────────────
 function render() {
-  list.render(state.all(), editor.currentId, { view });
+  const folders = state.folders();
+  const sel = currentFolder();
+  folderBar.render({ folders, notes: state.all(), selected: sel, visible: foldersEnabled && view === 'notes' });
+  editor.setFolders(folders, foldersEnabled);
+  list.render(state.all(), editor.currentId, { view, folderId: sel, folderName });
   const trashCount = state.all().filter((n) => n.deleted_at).length;
   $('trashBtn').textContent = view === 'trash' ? '‹ Back to notes' : `Trash${trashCount ? ` (${trashCount})` : ''}`;
   editor.renderMeta();
@@ -111,7 +147,9 @@ async function createNote() {
   await editor.flush();
   $('newBtn').disabled = true;
   try {
-    const note = await store.create({ title: '', body: '', updated_by: identity.displayName, editor_id: identity.clientId });
+    const fields = { title: '', body: '', updated_by: identity.displayName, editor_id: identity.clientId };
+    if (state.folder(currentFolder())) fields.folder_id = currentFolder();   // new notes go in the open folder
+    const note = await store.create(fields);
     state.upsert(note);
     await openNote(note.id);
     editor.focusTitle();
@@ -122,9 +160,67 @@ async function createNote() {
   }
 }
 
+// ── Folders ──────────────────────────────────────────────────
+function selectFolder(id) {
+  folderSel = id;
+  safeStorage.set(FOLDER_KEY, id);
+  render();
+}
+
+const findFolderByName = (name) =>
+  state.folders().find((f) => f.name.localeCompare(name, undefined, { sensitivity: 'base' }) === 0);
+
+async function newFolder() {
+  const name = await askText({ title: 'New folder', placeholder: 'e.g. Trips, Shopping, Ideas', okLabel: 'Create' });
+  if (!name) return;
+  const existing = findFolderByName(name);
+  if (existing) return selectFolder(existing.id);
+  try {
+    const f = await store.createFolder(name);
+    state.upsertFolder(f);
+    selectFolder(f.id);
+  } catch (err) { showBanner(`Couldn’t create the folder: ${err.message || 'try again'}`); }
+}
+
+async function renameFolder(folder) {
+  const name = await askText({ title: 'Rename folder', value: folder.name, okLabel: 'Rename' });
+  if (!name || name === folder.name) return;
+  const clash = findFolderByName(name);
+  if (clash && clash.id !== folder.id) return showBanner(`There’s already a folder called “${clash.name}”.`);
+  try { state.upsertFolder(await store.renameFolder(folder.id, name)); }
+  catch (err) { showBanner(`Couldn’t rename the folder: ${err.message || 'try again'}`); }
+}
+
+async function deleteFolder(folder) {
+  const n = state.all().filter((x) => x.folder_id === folder.id && !x.deleted_at).length;
+  const ok = await confirmDialog(
+    `Delete “${folder.name}”?`,
+    n ? `Its ${n} note${n === 1 ? '' : 's'} won’t be deleted. They’ll move to “No folder”.` : 'The folder is empty.',
+    'Delete folder');
+  if (!ok) return;
+  try {
+    await store.deleteFolder(folder.id);
+    state.removeFolder(folder.id);
+    selectFolder('all');
+  } catch (err) { showBanner(`Couldn’t delete the folder: ${err.message || 'try again'}`); }
+}
+
 // ── Data sync ────────────────────────────────────────────────
+async function refreshFolders() {
+  try {
+    const folders = await store.listFolders();
+    if (folders === null) {           // database not upgraded yet
+      if (foldersEnabled !== false) { foldersEnabled = false; render(); }
+      return;
+    }
+    foldersEnabled = true;
+    state.replaceFolders(folders);
+  } catch { /* keep what we have */ }
+}
+
 async function refresh() {
   try {
+    await refreshFolders();
     state.replaceAll(await store.list());
     if (editor.currentId && !state.has(editor.currentId)) closeNote();
   } catch {
@@ -133,6 +229,8 @@ async function refresh() {
 }
 
 function handleEvent(evt) {
+  if (evt.type === 'folder-upsert') { if (evt.folder) state.upsertFolder(evt.folder); return; }
+  if (evt.type === 'folder-delete') { if (evt.id) state.removeFolder(evt.id); return; }
   if (evt.type === 'delete') {
     if (!evt.id) return;
     if (evt.id === editor.currentId) closeNote();

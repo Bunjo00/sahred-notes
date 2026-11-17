@@ -51,6 +51,10 @@ export function createSupabaseStore({ supabaseUrl, supabaseKey, table = 'notes' 
           if (p.eventType === 'DELETE') onEvent({ type: 'delete', id: p.old?.id });
           else onEvent({ type: 'upsert', note: p.new });
         })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'folders' }, (p) => {
+          if (p.eventType === 'DELETE') onEvent({ type: 'folder-delete', id: p.old?.id });
+          else onEvent({ type: 'folder-upsert', folder: p.new });
+        })
         .subscribe((status) => {
           if (status === 'SUBSCRIBED') onStatus('live');
           else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') onStatus('offline');
@@ -68,6 +72,28 @@ export function createSupabaseStore({ supabaseUrl, supabaseKey, table = 'notes' 
 
     async cleanupTrash() {
       await sb.rpc('purge_old_trash');
+    },
+
+    async listFolders() {
+      const { data, error } = await sb.from('folders').select('*').order('name');
+      if (error) {
+        // Database not upgraded yet (add-folders.sql not run): work without folders.
+        if (/folders/i.test(error.message || '') && /(does not exist|schema cache|not find)/i.test(error.message || '')) return null;
+        throw new Error(error.message);
+      }
+      return data;
+    },
+
+    async createFolder(name) {
+      return check(await sb.from('folders').insert({ name }).select().single());
+    },
+
+    async renameFolder(id, name) {
+      return check(await sb.from('folders').update({ name }).eq('id', id).select().single());
+    },
+
+    async deleteFolder(id) {
+      check(await sb.from('folders').delete().eq('id', id));
     },
   };
 }

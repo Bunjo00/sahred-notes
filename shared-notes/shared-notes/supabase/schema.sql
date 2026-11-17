@@ -23,6 +23,17 @@ create table if not exists public.notes (
 alter table public.notes add column if not exists deleted_at timestamptz;
 alter table public.notes add column if not exists deleted_by text check (char_length(deleted_by) <= 40);
 
+-- ── Folders ──────────────────────────────────────────────────
+-- Deleting a folder never deletes notes: they just become "unfiled".
+create table if not exists public.folders (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null check (char_length(btrim(name)) between 1 and 60),
+  created_at timestamptz not null default now()
+);
+alter table public.notes add column if not exists folder_id uuid
+  references public.folders (id) on delete set null;
+create index if not exists notes_folder_id on public.notes (folder_id);
+
 -- The server owns the timestamps:
 --  • "last edited" only changes when the text changes (pinning/trashing don't count)
 --  • "deleted at" is set by the server when a note goes to trash
@@ -180,13 +191,34 @@ create policy "notes: members can add"  on public.notes
 create policy "notes: members can edit" on public.notes
   for update to authenticated using (public.is_member()) with check (public.is_member());
 
+-- Folders: members can see, add, rename and delete them.
+alter table public.folders enable row level security;
+revoke all on public.folders from anon;
+grant select, insert, update, delete on public.folders to authenticated;
+
+drop policy if exists "folders: members can read"   on public.folders;
+drop policy if exists "folders: members can add"    on public.folders;
+drop policy if exists "folders: members can rename" on public.folders;
+drop policy if exists "folders: members can delete" on public.folders;
+create policy "folders: members can read"   on public.folders
+  for select to authenticated using (public.is_member());
+create policy "folders: members can add"    on public.folders
+  for insert to authenticated with check (public.is_member());
+create policy "folders: members can rename" on public.folders
+  for update to authenticated using (public.is_member()) with check (public.is_member());
+create policy "folders: members can delete" on public.folders
+  for delete to authenticated using (public.is_member());
+
 -- ── Live updates ─────────────────────────────────────────────
 do $$
+declare t text;
 begin
-  if not exists (
-    select 1 from pg_publication_tables
-    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'notes'
-  ) then
-    alter publication supabase_realtime add table public.notes;
-  end if;
+  foreach t in array array['notes', 'folders'] loop
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    end if;
+  end loop;
 end $$;

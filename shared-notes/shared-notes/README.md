@@ -67,6 +67,16 @@ Then open the **Actions** tab, click **Keep Supabase awake → Run workflow** on
 
 ---
 
+## Folders
+Tabs above the list: **All**, one per folder, and **No folder**. **+ Folder** makes a new one.
+- **New notes** go into whichever folder is open.
+- **Move a note:** open it, then tap the folder button in its top bar.
+- **Rename / delete:** select the folder; the options appear just under the tabs. Deleting a folder never deletes notes: they move to **No folder**.
+
+**Already set up before folders existed?** Run `supabase/add-folders.sql` once in the SQL Editor. Until then, the app works as before, just without folders.
+
+---
+
 ## On phones
 The site adapts to phones and tablets. To use it like an app with its own icon:
 - **iPhone/iPad (Safari):** tap **Share** → **Add to Home Screen**.
